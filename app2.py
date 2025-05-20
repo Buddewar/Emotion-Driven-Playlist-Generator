@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -64,20 +65,15 @@ ZSCALER_CA_PATH = "D:/Python/env/zscaler_ca.cer"
 
 # Function to get Spotify access token with retry mechanism
 def get_spotify_token():
-    # Try to get from secrets first
-    try:
-        client_id = st.secrets.get("SPOTIFY_CLIENT_ID", "")
-        client_secret = st.secrets.get("SPOTIFY_CLIENT_SECRET", "")
-        st.write("Debug - Client ID found:", bool(client_id))
-        st.write("Debug - Client Secret found:", bool(client_secret))
-    except Exception as e:
-        st.error(f"Error accessing secrets: {str(e)}")
-        st.warning("If running on Streamlit Community Cloud, ensure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set in the app's secrets settings.")
-        client_id = ""
-        client_secret = ""
+    # Hardcoded Spotify API credentials (SECURITY WARNING: Avoid hardcoding in production)
+    client_id = "761fc01b7ef14669934744a90e257da48"
+    client_secret = "5f859d28495447c4bff110f48863c6fb"
+    
+    st.write("Debug - Client ID found:", bool(client_id))
+    st.write("Debug - Client Secret found:", bool(client_secret))
     
     if not client_id or not client_secret:
-        st.error("Spotify API credentials not found. Please set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in Streamlit secrets.")
+        st.error("Spotify API credentials are empty. Please provide valid SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.")
         return None
     
     auth_url = "https://accounts.spotify.com/api/token"
@@ -97,6 +93,7 @@ def get_spotify_token():
             'client_secret': client_secret,
         }, verify=verify_path)
         st.write("Debug - API Response Status:", auth_response.status_code)
+        st.write("Debug - API Response Text:", auth_response.text)
         if auth_response.status_code != 200:
             st.error(f"Error getting Spotify token: {auth_response.text}")
             return None
@@ -115,6 +112,7 @@ def get_spotify_token():
 # Function to search for playlists based on emotions
 def get_playlists_for_emotion(emotion, token):
     if not token:
+        st.warning("No Spotify token available. Cannot fetch playlists.")
         return []
     
     base_url = "https://api.spotify.com/v1/search"
@@ -144,25 +142,33 @@ def get_playlists_for_emotion(emotion, token):
             # Use Zscaler CA certificate locally, fall back to certifi for cloud
             verify_path = ZSCALER_CA_PATH if os.path.exists(ZSCALER_CA_PATH) else certifi.where()
             response = session.get(base_url, headers=headers, params=params, verify=verify_path)
+            st.write(f"Debug - Search query: {query}")
+            st.write(f"Debug - Search response status: {response.status_code}")
+            st.write(f"Debug - Search response text: {response.text}")
             if response.status_code == 200:
                 results = response.json()
-                if results["playlists"]["items"]:
+                if results.get("playlists", {}).get("items"):
                     playlists.extend(results["playlists"]["items"])
+                else:
+                    st.warning(f"No playlists found for query: {query}")
             else:
-                st.warning(f"Error searching Spotify: {response.text}")
+                st.warning(f"Error searching Spotify for {query}: {response.text}")
         except requests.exceptions.SSLError as ssl_err:
             st.error(f"SSL Error searching Spotify API: {str(ssl_err)}")
         except Exception as e:
-            st.error(f"Error searching Spotify: {str(e)}")
+            st.error(f"Error searching Spotify for {query}: {str(e)}")
     
-    # Return up to 5 unique playlists
+    # Filter out None values and return up to 5 unique playlists
     unique_playlists = []
     unique_ids = set()
     
     for playlist in playlists:
-        if playlist["id"] not in unique_ids and len(unique_playlists) < 5:
-            unique_ids.add(playlist["id"])
-            unique_playlists.append(playlist)
+        if playlist is not None and isinstance(playlist, dict) and "id" in playlist:
+            if playlist["id"] not in unique_ids and len(unique_playlists) < 5:
+                unique_ids.add(playlist["id"])
+                unique_playlists.append(playlist)
+        else:
+            st.warning("Skipping invalid playlist entry (None or missing id)")
     
     return unique_playlists
 
@@ -239,7 +245,7 @@ def main():
     
     # Warn if running in cloud environment
     if 'STREAMLIT_CLOUD' in os.environ:
-        st.info("Running on Streamlit Community Cloud to bypass local network restrictions. If Spotify API fails, check secrets configuration.")
+        st.info("Running on Streamlit Community Cloud to bypass local network restrictions.")
     else:
         st.info("Running locally. If Spotify API fails, ensure Zscaler CA certificate is set or deploy to Streamlit Community Cloud.")
     
@@ -366,7 +372,7 @@ def main():
                                 
                                 st.markdown("---")
                         else:
-                            st.info(f"No playlists found for {emotion} mood. Try again with a different emotion.")
+                            st.info(f"No playlists found for {emotion} mood. Try again with a different emotion or check Spotify API status.")
                     else:
                         st.warning("Could not connect to Spotify. Using demo mode. Check API credentials or network settings.")
                         
