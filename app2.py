@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import requests
@@ -65,15 +64,19 @@ ZSCALER_CA_PATH = "D:/Python/env/zscaler_ca.cer"
 
 # Function to get Spotify access token with retry mechanism
 def get_spotify_token():
-    # Hardcoded Spotify API credentials (SECURITY WARNING: Avoid hardcoding in production)
-    client_id = "761fc01b7ef14669934744a90e257da48"
-    client_secret = "5f859d28495447c4bff110f48863c6fb"
-    
-    st.write("Debug - Client ID found:", bool(client_id))
-    st.write("Debug - Client Secret found:", bool(client_secret))
+    # Retrieve Spotify API credentials from Streamlit secrets
+    try:
+        client_id = st.secrets.get("SPOTIFY_CLIENT_ID", "")
+        client_secret = st.secrets.get("SPOTIFY_CLIENT_SECRET", "")
+        st.write("Debug - Client ID found:", bool(client_id))
+        st.write("Debug - Client Secret found:", bool(client_secret))
+    except Exception as e:
+        st.error(f"Error accessing secrets: {str(e)}")
+        st.warning("Ensure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set in Streamlit Community Cloud's secrets settings.")
+        return None
     
     if not client_id or not client_secret:
-        st.error("Spotify API credentials are empty. Please provide valid SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.")
+        st.error("Spotify API credentials not found. Please set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in Streamlit secrets.")
         return None
     
     auth_url = "https://accounts.spotify.com/api/token"
