@@ -1,13 +1,11 @@
 import streamlit as st
 import pandas as pd
 import requests
-import json
 import cv2
 import numpy as np
 import random
 from PIL import Image
 from io import BytesIO
-import base64
 import certifi
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -68,15 +66,10 @@ def get_spotify_token():
     try:
         client_id = st.secrets.get("SPOTIFY_CLIENT_ID", "")
         client_secret = st.secrets.get("SPOTIFY_CLIENT_SECRET", "")
-        st.write("Debug - Client ID found:", bool(client_id))
-        st.write("Debug - Client Secret found:", bool(client_secret))
-    except Exception as e:
-        st.error(f"Error accessing secrets: {str(e)}")
-        st.warning("Ensure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set in Streamlit Community Cloud's secrets settings.")
+    except Exception:
         return None
     
     if not client_id or not client_secret:
-        st.error("Spotify API credentials not found. Please set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in Streamlit secrets.")
         return None
     
     auth_url = "https://accounts.spotify.com/api/token"
@@ -89,33 +82,22 @@ def get_spotify_token():
     try:
         # Use Zscaler CA certificate locally, fall back to certifi for cloud
         verify_path = ZSCALER_CA_PATH if os.path.exists(ZSCALER_CA_PATH) else certifi.where()
-        st.write("Debug - Using CA path:", verify_path)
         auth_response = session.post(auth_url, {
             'grant_type': 'client_credentials',
             'client_id': client_id,
             'client_secret': client_secret,
         }, verify=verify_path)
-        st.write("Debug - API Response Status:", auth_response.status_code)
-        st.write("Debug - API Response Text:", auth_response.text)
         if auth_response.status_code != 200:
-            st.error(f"Error getting Spotify token: {auth_response.text}")
             return None
         
         auth_data = auth_response.json()
         return auth_data['access_token']
-    except requests.exceptions.SSLError as ssl_err:
-        st.error(f"SSL Error connecting to Spotify API: {str(ssl_err)}")
-        st.warning("If running locally, ensure the Zscaler CA certificate is correctly exported and placed at D:/Python/env/zscaler_ca.cer.")
-        st.warning("Alternatively, deploy to Streamlit Community Cloud to bypass local network restrictions.")
-        return None
-    except Exception as e:
-        st.error(f"Error making API request: {str(e)}")
+    except:
         return None
 
 # Function to search for playlists based on emotions
 def get_playlists_for_emotion(emotion, token):
     if not token:
-        st.warning("No Spotify token available. Cannot fetch playlists.")
         return []
     
     base_url = "https://api.spotify.com/v1/search"
@@ -145,21 +127,12 @@ def get_playlists_for_emotion(emotion, token):
             # Use Zscaler CA certificate locally, fall back to certifi for cloud
             verify_path = ZSCALER_CA_PATH if os.path.exists(ZSCALER_CA_PATH) else certifi.where()
             response = session.get(base_url, headers=headers, params=params, verify=verify_path)
-            st.write(f"Debug - Search query: {query}")
-            st.write(f"Debug - Search response status: {response.status_code}")
-            st.write(f"Debug - Search response text: {response.text}")
             if response.status_code == 200:
                 results = response.json()
                 if results.get("playlists", {}).get("items"):
                     playlists.extend(results["playlists"]["items"])
-                else:
-                    st.warning(f"No playlists found for query: {query}")
-            else:
-                st.warning(f"Error searching Spotify for {query}: {response.text}")
-        except requests.exceptions.SSLError as ssl_err:
-            st.error(f"SSL Error searching Spotify API: {str(ssl_err)}")
-        except Exception as e:
-            st.error(f"Error searching Spotify for {query}: {str(e)}")
+        except:
+            pass
     
     # Filter out None values and return up to 5 unique playlists
     unique_playlists = []
@@ -170,8 +143,6 @@ def get_playlists_for_emotion(emotion, token):
             if playlist["id"] not in unique_ids and len(unique_playlists) < 5:
                 unique_ids.add(playlist["id"])
                 unique_playlists.append(playlist)
-        else:
-            st.warning("Skipping invalid playlist entry (None or missing id)")
     
     return unique_playlists
 
@@ -245,12 +216,6 @@ def select_emotion():
 def main():
     st.title("😊 Emotion-Driven Music Recommender 🎵")
     st.write("Let your emotions choose your music! We'll recommend playlists based on your mood.")
-    
-    # Warn if running in cloud environment
-    if 'STREAMLIT_CLOUD' in os.environ:
-        st.info("Running on Streamlit Community Cloud to bypass local network restrictions.")
-    else:
-        st.info("Running locally. If Spotify API fails, ensure Zscaler CA certificate is set or deploy to Streamlit Community Cloud.")
     
     # Initialize session state for playlist display
     if 'show_playlists' not in st.session_state:
@@ -375,43 +340,11 @@ def main():
                                 
                                 st.markdown("---")
                         else:
-                            st.info(f"No playlists found for {emotion} mood. Try again with a different emotion or check Spotify API status.")
+                            st.error("Unable to fetch playlists. Please try again later.")
                     else:
-                        st.warning("Could not connect to Spotify. Using demo mode. Check API credentials or network settings.")
-                        
-                        # Demo playlists
-                        st.subheader("Demo Recommended Playlists")
-                        for i in range(3):
-                            col_a, col_b = st.columns([1, 3])
-                            
-                            with col_a:
-                                st.image("https://via.placeholder.com/120", width=120)
-                            
-                            with col_b:
-                                st.markdown(f"**{emotion.capitalize()} Playlist {i+1}**")
-                                st.write(f"By: Demo User")
-                                st.write(f"Tracks: {random.randint(12, 45)}")
-                                st.markdown(f"[This would link to Spotify in the real version](#)")
-                            
-                            st.markdown("---")
+                        st.error("Unable to connect to Spotify. Please try again later.")
             else:
-                # Demo playlists without Spotify API
-                st.info("Spotify API is disabled. Using demo playlists instead.")
-                
-                st.subheader("Demo Recommended Playlists")
-                for i in range(3):
-                    col_a, col_b = st.columns([1, 3])
-                    
-                    with col_a:
-                        st.image("https://via.placeholder.com/120", width=120)
-                    
-                    with col_b:
-                        st.markdown(f"**{emotion.capitalize()} Playlist {i+1}**")
-                        st.write(f"By: Demo User")
-                        st.write(f"Tracks: {random.randint(12, 45)}")
-                        st.markdown(f"[This would link to Spotify in the real version](#)")
-                    
-                    st.markdown("---")
+                st.error("Spotify API is disabled. Please enable it in settings.")
             
             # Add user feedback
             st.subheader("How well did these recommendations match your mood?")
